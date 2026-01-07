@@ -307,20 +307,25 @@
     async function fetchPolymarketOdds() {
       const polyUrl = 'https://gamma-api.polymarket.com/events?series_id=10346&active=true&closed=false&limit=100';
       const proxyUrls = [
+        polyUrl,  // Try direct first
         'https://corsproxy.io/?' + encodeURIComponent(polyUrl),
-        'https://api.allorigins.win/raw?url=' + encodeURIComponent(polyUrl)
+        'https://api.allorigins.win/raw?url=' + encodeURIComponent(polyUrl),
+        'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(polyUrl)
       ];
+      
+      console.log('Attempting Polymarket fetch...');
       
       for (const url of proxyUrls) {
         try {
+          console.log('Trying Polymarket:', url.substring(0, 50));
           const res = await fetch(url);
           if (!res.ok) {
-            console.log('Polymarket fetch not ok:', res.status);
+            console.log('Polymarket not ok:', res.status);
             continue;
           }
           const events = await res.json();
           
-          console.log('Polymarket raw events:', events.length, events.slice(0, 3));
+          console.log('Polymarket events received:', events.length);
           
           // Clear old data
           polymarketData = {};
@@ -2356,18 +2361,16 @@
           <div class="max-w-lg mx-auto text-center text-xs text-gray-500">
             Data from NHL API & Kalshi • Win probability via Bernier model
           </div>
-          ${Object.keys(oddsApiRawData).length > 0 || Object.keys(polymarketData).length > 0 ? `
           <div class="max-w-lg mx-auto mt-4 p-3 bg-black/30 rounded-lg">
             ${Object.keys(oddsApiRawData).length > 0 ? `
             <div class="text-xs text-gray-400 mb-2">Debug - Odds API Keys (${Object.keys(oddsApiRawData).length}):</div>
             <div class="text-xs text-green-400 font-mono break-all">${Object.keys(oddsApiRawData).join(', ')}</div>
             ` : ''}
             <div class="text-xs text-gray-400 mt-2">Polymarket Keys (${Object.keys(polymarketData).length}):</div>
-            <div class="text-xs text-pink-400 font-mono break-all">${Object.keys(polymarketData).length > 0 ? Object.keys(polymarketData).join(', ') : 'None loaded'}</div>
+            <div class="text-xs text-pink-400 font-mono break-all">${Object.keys(polymarketData).length > 0 ? Object.keys(polymarketData).join(', ') : 'None loaded - check console for errors'}</div>
             <div class="text-xs text-gray-400 mt-2">Games looking for:</div>
             <div class="text-xs text-blue-400 font-mono">${games.map(g => g.awayAbbrev + '-' + g.homeAbbrev).join(', ')}</div>
           </div>
-          ` : ''}
         </footer>
       `;
 
