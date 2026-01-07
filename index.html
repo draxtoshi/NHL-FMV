@@ -889,6 +889,7 @@
     // Normalize team name for matching
     function normalizeTeamName(name) {
       const teamMap = {
+        // Full names
         'Anaheim Ducks': 'ANA',
         'Boston Bruins': 'BOS',
         'Buffalo Sabres': 'BUF',
@@ -926,8 +927,39 @@
         'Vegas Golden Knights': 'VGK',
         'Washington Capitals': 'WSH',
         'Winnipeg Jets': 'WPG',
-        // Arizona Coyotes (old name, now Utah)
-        'Arizona Coyotes': 'UTA'
+        'Arizona Coyotes': 'UTA',
+        // Short names (for Polymarket)
+        'Ducks': 'ANA',
+        'Bruins': 'BOS',
+        'Sabres': 'BUF',
+        'Flames': 'CGY',
+        'Hurricanes': 'CAR',
+        'Blackhawks': 'CHI',
+        'Avalanche': 'COL',
+        'Blue Jackets': 'CBJ',
+        'Stars': 'DAL',
+        'Red Wings': 'DET',
+        'Oilers': 'EDM',
+        'Panthers': 'FLA',
+        'Kings': 'LAK',
+        'Wild': 'MIN',
+        'Canadiens': 'MTL',
+        'Predators': 'NSH',
+        'Devils': 'NJD',
+        'Islanders': 'NYI',
+        'Rangers': 'NYR',
+        'Senators': 'OTT',
+        'Flyers': 'PHI',
+        'Penguins': 'PIT',
+        'Sharks': 'SJS',
+        'Kraken': 'SEA',
+        'Blues': 'STL',
+        'Lightning': 'TBL',
+        'Maple Leafs': 'TOR',
+        'Canucks': 'VAN',
+        'Golden Knights': 'VGK',
+        'Capitals': 'WSH',
+        'Jets': 'WPG'
       };
       return teamMap[name] || name;
     }
