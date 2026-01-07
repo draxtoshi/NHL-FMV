@@ -314,15 +314,21 @@
       for (const url of proxyUrls) {
         try {
           const res = await fetch(url);
-          if (!res.ok) continue;
+          if (!res.ok) {
+            console.log('Polymarket fetch not ok:', res.status);
+            continue;
+          }
           const events = await res.json();
           
-          console.log('Polymarket events:', events.length);
+          console.log('Polymarket raw events:', events.length, events.slice(0, 3));
           
           // Clear old data
           polymarketData = {};
           
           events.forEach(event => {
+            // Log raw event for debugging
+            console.log('Polymarket event:', event.title, event.markets?.length, 'markets');
+            
             // Parse the event title to extract teams
             // Title format: "NHL: Team A vs Team B" or "Team A vs Team B"
             const title = event.title || '';
@@ -334,10 +340,14 @@
               const team1Abbrev = normalizeTeamName(team1Name);
               const team2Abbrev = normalizeTeamName(team2Name);
               
+              console.log(`Polymarket parsed: "${team1Name}" (${team1Abbrev}) vs "${team2Name}" (${team2Abbrev})`);
+              
               // Get the market prices
               const market = event.markets[0];
               const outcomes = JSON.parse(market.outcomes || '[]');
               const prices = JSON.parse(market.outcomePrices || '[]');
+              
+              console.log('Polymarket outcomes:', outcomes, 'prices:', prices);
               
               if (outcomes.length >= 2 && prices.length >= 2) {
                 // Find which outcome corresponds to which team
@@ -372,9 +382,11 @@
                     title: event.title,
                     slug: event.slug
                   };
-                  console.log(`Polymarket: ${key} -> ${team1Abbrev}=${(team1Prob*100).toFixed(0)}%, ${team2Abbrev}=${(team2Prob*100).toFixed(0)}%`);
+                  console.log(`Polymarket stored: ${key} -> ${team1Abbrev}=${(team1Prob*100).toFixed(0)}%, ${team2Abbrev}=${(team2Prob*100).toFixed(0)}%`);
                 }
               }
+            } else {
+              console.log('Polymarket no match for title:', title);
             }
           });
           
@@ -2344,10 +2356,14 @@
           <div class="max-w-lg mx-auto text-center text-xs text-gray-500">
             Data from NHL API & Kalshi • Win probability via Bernier model
           </div>
-          ${Object.keys(oddsApiRawData).length > 0 ? `
+          ${Object.keys(oddsApiRawData).length > 0 || Object.keys(polymarketData).length > 0 ? `
           <div class="max-w-lg mx-auto mt-4 p-3 bg-black/30 rounded-lg">
+            ${Object.keys(oddsApiRawData).length > 0 ? `
             <div class="text-xs text-gray-400 mb-2">Debug - Odds API Keys (${Object.keys(oddsApiRawData).length}):</div>
             <div class="text-xs text-green-400 font-mono break-all">${Object.keys(oddsApiRawData).join(', ')}</div>
+            ` : ''}
+            <div class="text-xs text-gray-400 mt-2">Polymarket Keys (${Object.keys(polymarketData).length}):</div>
+            <div class="text-xs text-pink-400 font-mono break-all">${Object.keys(polymarketData).length > 0 ? Object.keys(polymarketData).join(', ') : 'None loaded'}</div>
             <div class="text-xs text-gray-400 mt-2">Games looking for:</div>
             <div class="text-xs text-blue-400 font-mono">${games.map(g => g.awayAbbrev + '-' + g.homeAbbrev).join(', ')}</div>
           </div>
