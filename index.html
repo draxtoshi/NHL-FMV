@@ -335,9 +335,14 @@
             console.log('Polymarket event:', event.title, event.markets?.length, 'markets');
             
             // Parse the event title to extract teams
-            // Title format: "NHL: Team A vs Team B" or "Team A vs Team B"
+            // Title format could be: "NHL: Team A vs Team B" or "Team A vs Team B" or "Team A - Team B"
             const title = event.title || '';
-            const match = title.match(/(?:NHL:\s*)?(.+?)\s+vs\.?\s+(.+)/i);
+            let match = title.match(/(?:NHL:\s*)?(.+?)\s+vs\.?\s+(.+)/i);
+            
+            // If vs format didn't match, try dash format
+            if (!match) {
+              match = title.match(/(?:NHL:\s*)?(.+?)\s*[-–]\s*(.+)/i);
+            }
             
             if (match && event.markets && event.markets.length > 0) {
               const team1Name = match[1].trim();
@@ -345,7 +350,12 @@
               const team1Abbrev = normalizeTeamName(team1Name);
               const team2Abbrev = normalizeTeamName(team2Name);
               
-              console.log(`Polymarket parsed: "${team1Name}" (${team1Abbrev}) vs "${team2Name}" (${team2Abbrev})`);
+              console.log(`Polymarket: "${team1Name}" -> "${team1Abbrev}", "${team2Name}" -> "${team2Abbrev}"`);
+              
+              // Skip if normalization failed (returned same name)
+              if (team1Abbrev === team1Name || team2Abbrev === team2Name) {
+                console.log(`Polymarket normalization failed for: ${team1Name} or ${team2Name}`);
+              }
               
               // Get the market prices
               const market = event.markets[0];
@@ -959,8 +969,16 @@
         'Canucks': 'VAN',
         'Golden Knights': 'VGK',
         'Capitals': 'WSH',
-        'Jets': 'WPG'
+        'Jets': 'WPG',
+        'UTA': 'UTA'
       };
+      // Also try lowercase matching
+      const lowerName = name.toLowerCase().trim();
+      for (const [key, val] of Object.entries(teamMap)) {
+        if (key.toLowerCase() === lowerName) {
+          return val;
+        }
+      }
       return teamMap[name] || name;
     }
     
@@ -2318,7 +2336,7 @@
                     <div class="font-semibold text-sm text-gray-100 tracking-tight">${away.name}</div>
                     <div class="text-xs text-gray-500">
                       <div class="truncate">
-                        ${fmv.bestLineOdds?.away ? `<span class="text-amber-400">Best:</span> <span class="mono text-amber-400">${fmv.bestLineOdds.away.odds > 0 ? '+' : ''}${fmv.bestLineOdds.away.odds}</span> <span class="text-gray-600">(${fmv.bestLineOdds.away.abbrev})</span>` : `Pre: <span class="mono">${fmtOdds(fmv.pregameAway)}</span>`}${fmv.isLocked ? ' 🔒' : ''}
+                        ${fmv.arb && fmv.arb.awayBook ? `<span class="text-green-400 font-semibold">ARB: ${fmv.arb.awayBook} ${fmv.arb.awayOdds > 0 ? '+' : ''}${fmv.arb.awayOdds}</span>` : fmv.bestLineOdds?.away ? `<span class="text-amber-400">Best:</span> <span class="mono text-amber-400">${fmv.bestLineOdds.away.odds > 0 ? '+' : ''}${fmv.bestLineOdds.away.odds}</span> <span class="text-gray-600">(${fmv.bestLineOdds.away.abbrev})</span>` : `Pre: <span class="mono">${fmtOdds(fmv.pregameAway)}</span>`}${fmv.isLocked ? ' 🔒' : ''}
                         ${fmv.kalshiAway && g.state !== 'FUT' ? `<span class="ml-2 text-blue-400">K: <span class="mono">${(fmv.kalshiAway*100).toFixed(0)}%</span></span>` : ''}
                       </div>
                       ${fmv.devigAway || fmv.polyAway ? `<div>${fmv.devigAway ? `<span class="text-purple-400">DV: <span class="mono">${fmtOdds(fmv.devigAway)}</span></span>` : ''}${fmv.polyAway ? `<span class="ml-2 text-pink-400">PM: <span class="mono">${fmtOdds(fmv.polyAway)}</span></span>` : ''}</div>` : ''}
@@ -2341,7 +2359,7 @@
                     <div class="font-semibold text-sm text-gray-100 tracking-tight">${home.name}</div>
                     <div class="text-xs text-gray-500">
                       <div class="truncate">
-                        ${fmv.bestLineOdds?.home ? `<span class="text-amber-400">Best:</span> <span class="mono text-amber-400">${fmv.bestLineOdds.home.odds > 0 ? '+' : ''}${fmv.bestLineOdds.home.odds}</span> <span class="text-gray-600">(${fmv.bestLineOdds.home.abbrev})</span>` : `Pre: <span class="mono">${fmtOdds(fmv.pregameHome)}</span>`}${fmv.isLocked ? ' 🔒' : ''}
+                        ${fmv.arb && fmv.arb.homeBook ? `<span class="text-green-400 font-semibold">ARB: ${fmv.arb.homeBook} ${fmv.arb.homeOdds > 0 ? '+' : ''}${fmv.arb.homeOdds}</span>` : fmv.bestLineOdds?.home ? `<span class="text-amber-400">Best:</span> <span class="mono text-amber-400">${fmv.bestLineOdds.home.odds > 0 ? '+' : ''}${fmv.bestLineOdds.home.odds}</span> <span class="text-gray-600">(${fmv.bestLineOdds.home.abbrev})</span>` : `Pre: <span class="mono">${fmtOdds(fmv.pregameHome)}</span>`}${fmv.isLocked ? ' 🔒' : ''}
                         ${fmv.kalshiHome && g.state !== 'FUT' ? `<span class="ml-2 text-blue-400">K: <span class="mono">${(fmv.kalshiHome*100).toFixed(0)}%</span></span>` : ''}
                       </div>
                       ${fmv.devigHome || fmv.polyHome ? `<div>${fmv.devigHome ? `<span class="text-purple-400">DV: <span class="mono">${fmtOdds(fmv.devigHome)}</span></span>` : ''}${fmv.polyHome ? `<span class="ml-2 text-pink-400">PM: <span class="mono">${fmtOdds(fmv.polyHome)}</span></span>` : ''}</div>` : ''}
