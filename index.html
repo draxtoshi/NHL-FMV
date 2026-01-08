@@ -186,15 +186,15 @@
       return Math.max(0, Math.min(1, baseProb + 0.50 * (pregameProb - 0.50)));
     }
 
-    // Weighted aggregate of both models (60% table, 40% exponential)
+    // Weighted aggregate of both models (70% table, 30% exponential)
     function calcWinProb(pregameProb, deficit, seconds) {
       if (deficit === 0) return pregameProb;
       
       const tableProb = calcTableProb(pregameProb, deficit, seconds);
       const expProb = calcExpDecayProb(pregameProb, deficit, seconds);
       
-      // Weight: 60% lookup table, 40% exponential decay
-      const weightedProb = 0.6 * tableProb + 0.4 * expProb;
+      // Weight: 70% lookup table, 30% exponential decay
+      const weightedProb = 0.7 * tableProb + 0.3 * expProb;
       
       return Math.max(0.001, Math.min(0.999, weightedProb));
     }
@@ -359,7 +359,8 @@
 
     // Fetch Polymarket NHL game odds
     async function fetchPolymarketOdds() {
-      const polyUrl = 'https://gamma-api.polymarket.com/events?series_id=10346&active=true&closed=false&limit=100';
+      const timestamp = Date.now();
+      const polyUrl = `https://gamma-api.polymarket.com/events?series_id=10346&active=true&closed=false&limit=100&_t=${timestamp}`;
       const proxyUrls = [
         polyUrl,  // Try direct first
         'https://corsproxy.io/?' + encodeURIComponent(polyUrl),
@@ -372,7 +373,10 @@
       for (const url of proxyUrls) {
         try {
           console.log('Trying Polymarket:', url.substring(0, 50));
-          const res = await fetch(url);
+          const res = await fetch(url, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' }
+          });
           if (!res.ok) {
             console.log('Polymarket not ok:', res.status);
             continue;
