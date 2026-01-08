@@ -2414,14 +2414,16 @@
             Data from NHL API & Kalshi • Win probability via Bernier model
           </div>
           <div class="max-w-lg mx-auto mt-4 p-3 bg-black/30 rounded-lg">
-            <div class="text-xs text-gray-400 mb-2">NHL Games (${games.length}):</div>
-            <div class="text-xs text-cyan-400 font-mono break-all">${games.map(g => `${g.awayAbbrev}@${g.homeAbbrev}:${g.state}:P${g.period}:${g.awayScore}-${g.homeScore}`).join(', ')}</div>
+            <div class="text-xs text-gray-400 mb-2">NHL Games State (${games.length}):</div>
+            <div class="text-xs text-cyan-400 font-mono break-all mb-3">${games.length > 0 ? games.map(g => `${g.awayAbbrev}@${g.homeAbbrev}:${g.state}:P${g.period}:${g.awayScore}-${g.homeScore}`).join(', ') : 'No games loaded'}</div>
             ${Object.keys(oddsApiRawData).length > 0 ? `
-            <div class="text-xs text-gray-400 mt-2">Odds API Keys (${Object.keys(oddsApiRawData).length}):</div>
-            <div class="text-xs text-green-400 font-mono break-all">${Object.keys(oddsApiRawData).join(', ')}</div>
-            ` : ''}
-            <div class="text-xs text-gray-400 mt-2">Polymarket Keys (${Object.keys(polymarketData).length}):</div>
-            <div class="text-xs text-pink-400 font-mono break-all">${Object.keys(polymarketData).length > 0 ? Object.keys(polymarketData).join(', ') : 'None loaded'}</div>
+            <div class="text-xs text-gray-400">Odds API Keys (${Object.keys(oddsApiRawData).length}):</div>
+            <div class="text-xs text-green-400 font-mono break-all mb-3">${Object.keys(oddsApiRawData).join(', ')}</div>
+            ` : '<div class="text-xs text-yellow-400 mb-3">No Odds API data</div>'}
+            <div class="text-xs text-gray-400">Polymarket Keys (${Object.keys(polymarketData).length}):</div>
+            <div class="text-xs text-pink-400 font-mono break-all mb-3">${Object.keys(polymarketData).length > 0 ? Object.keys(polymarketData).join(', ') : 'None loaded'}</div>
+            <div class="text-xs text-gray-400">Games looking for:</div>
+            <div class="text-xs text-blue-400 font-mono">${games.map(g => g.awayAbbrev + '-' + g.homeAbbrev).join(', ')}</div>
           </div>
         </footer>
       `;
