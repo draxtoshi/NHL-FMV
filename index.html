@@ -997,7 +997,9 @@
 
     // Fetch Kalshi NHL markets
     async function fetchKalshiMarkets() {
-      const kalshiUrl = 'https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXNHLGAME&status=open&limit=200';
+      // Add timestamp to bust cache
+      const timestamp = Date.now();
+      const kalshiUrl = `https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXNHLGAME&status=open&limit=200&_t=${timestamp}`;
       const proxyUrls = [
         kalshiUrl, // Try direct first
         'https://corsproxy.io/?' + encodeURIComponent(kalshiUrl),
@@ -1041,7 +1043,9 @@
             }
             
             const [, dateCode, team1, team2, winner] = match;
-            console.log(`Parsed: ${m.ticker} -> team1=${team1}, team2=${team2}, winner=${winner}`);
+            
+            // Log ALL price fields from Kalshi
+            console.log(`Kalshi RAW ${m.ticker}: yes_bid=${m.yes_bid}, yes_ask=${m.yes_ask}, last_price=${m.last_price}, yes_sub_title=${m.yes_sub_title}, no_bid=${m.no_bid}, no_ask=${m.no_ask}`);
             
             // Store using the teams as they appear in the ticker
             const gameKey = `${team1}-${team2}`;
@@ -1050,15 +1054,15 @@
               gameMarkets[gameKey] = { team1, team2 };
             }
             
-            // Use bid/ask mid for current price, fallback to last_price
-            // Kalshi prices are in cents (0-100)
+            // Use yes_ask as the "buy yes" price (what you'd pay to bet on this team)
+            // This is closer to what Kalshi website shows
             let price;
-            if (m.yes_bid && m.yes_ask) {
-              // Calculate mid from bid/ask (most current)
-              price = (m.yes_bid + m.yes_ask) / 2 / 100;
-            } else if (m.yes_ask) {
-              // Only ask available
+            if (m.yes_ask) {
+              // Use ask price (the "Yes XX¢" shown on website)
               price = m.yes_ask / 100;
+            } else if (m.yes_bid && m.yes_ask) {
+              // Calculate mid from bid/ask
+              price = (m.yes_bid + m.yes_ask) / 2 / 100;
             } else if (m.yes_bid) {
               // Only bid available
               price = m.yes_bid / 100;
@@ -1069,7 +1073,7 @@
               price = 0.5; // Default fallback
             }
             
-            console.log(`Kalshi ticker ${m.ticker}: ${winner} = ${(price*100).toFixed(0)}% (bid=${m.yes_bid}, ask=${m.yes_ask}, last=${m.last_price})`);
+            console.log(`Kalshi ${m.ticker}: ${winner} = ${(price*100).toFixed(0)}%`);
             
             if (winner === team1) {
               gameMarkets[gameKey].team1Prob = price;
