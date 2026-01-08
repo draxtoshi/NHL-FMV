@@ -1342,8 +1342,10 @@
       return data.games.map(g => {
         const gs = g.gameState;
         let state = 'FUT';
-        if (gs === 'LIVE' || gs === 'CRIT') state = 'LIVE';
-        else if (gs === 'FINAL' || gs === 'OFF') state = 'FINAL';
+        // Handle all possible NHL API game states
+        if (gs === 'LIVE' || gs === 'CRIT' || gs === 'PROG' || gs === 'INP') state = 'LIVE';
+        else if (gs === 'FINAL' || gs === 'OFF' || gs === 'OVER') state = 'FINAL';
+        else if (gs === 'PRE' || gs === 'FUT') state = 'FUT';
         
         console.log(`NHL Game: ${g.awayTeam?.abbrev} @ ${g.homeTeam?.abbrev}, gameState=${gs}, parsed=${state}, period=${g.period}, score=${g.awayTeam?.score}-${g.homeTeam?.score}`);
         
@@ -1358,6 +1360,7 @@
           period: g.period || 0,
           clock: g.clock?.timeRemaining || '20:00',
           state,
+          rawState: gs, // Keep raw state for debugging
           startTime: g.startTimeUTC ? new Date(g.startTimeUTC).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '',
           startTimeRaw
         };
@@ -1597,6 +1600,8 @@
           // For FUT and FINAL, sort by start time
           return (a.startTimeRaw || 0) - (b.startTimeRaw || 0);
         });
+        
+        console.log('After sort, first 3 games:', games.slice(0, 3).map(g => `${g.awayAbbrev}@${g.homeAbbrev}:${g.state}`));
           
         // Detect events and generate alerts
         games.forEach(g => {
@@ -2424,7 +2429,7 @@
           </div>
           <div class="max-w-lg mx-auto mt-4 p-3 bg-black/30 rounded-lg">
             <div class="text-xs text-gray-400 mb-2">NHL Games State (${games.length}):</div>
-            <div class="text-xs text-cyan-400 font-mono break-all mb-3">${games.length > 0 ? games.map(g => `${g.awayAbbrev}@${g.homeAbbrev}:${g.state}:P${g.period}:${g.awayScore}-${g.homeScore}`).join(', ') : 'No games loaded'}</div>
+            <div class="text-xs text-cyan-400 font-mono break-all mb-3">${games.length > 0 ? games.map(g => `${g.awayAbbrev}@${g.homeAbbrev}:${g.state}(${g.rawState || '?'}):P${g.period}:${g.awayScore}-${g.homeScore}`).join(', ') : 'No games loaded'}</div>
             ${Object.keys(oddsApiRawData).length > 0 ? `
             <div class="text-xs text-gray-400">Odds API Keys (${Object.keys(oddsApiRawData).length}):</div>
             <div class="text-xs text-green-400 font-mono break-all mb-3">${Object.keys(oddsApiRawData).join(', ')}</div>
