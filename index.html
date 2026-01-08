@@ -1550,8 +1550,7 @@
       const sbHomeOdds = sportsbook?.homeOdds || null;
       const sbAwayOdds = sportsbook?.awayOdds || null;
       
-      // Get devigged consensus odds
-      const devigged = getDeviggedOdds(g.homeAbbrev, g.awayAbbrev);
+      // Get devigged consensus odds (already fetched above)
       const devigHome = devigged?.homeProb || null;
       const devigAway = devigged?.awayProb || null;
       const devigBooksUsed = devigged?.booksUsed || 0;
