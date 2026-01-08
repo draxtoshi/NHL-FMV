@@ -299,6 +299,38 @@
     // Locked pregame prices (locked when game goes live)
     let lockedPregamePrices = {};
     
+    // User-entered pregame prices (persisted in localStorage)
+    let userPregamePrices = JSON.parse(localStorage.getItem('userPregamePrices') || '{}');
+    
+    function setUserPregame(gameKey, homeProb) {
+      userPregamePrices[gameKey] = { home: homeProb, away: 1 - homeProb };
+      localStorage.setItem('userPregamePrices', JSON.stringify(userPregamePrices));
+      // Also update locked prices
+      lockedPregamePrices[gameKey] = userPregamePrices[gameKey];
+      render();
+    }
+    
+    function promptPregame(gameKey, homeName, currentHomeProb) {
+      const currentPct = Math.round(currentHomeProb * 100);
+      const input = prompt(`Enter pregame win % for ${homeName} (home team):`, currentPct);
+      if (input !== null) {
+        let pct = parseFloat(input);
+        if (!isNaN(pct)) {
+          // Handle American odds input (e.g., -150, +130)
+          if (input.includes('+') || input.includes('-')) {
+            const odds = parseInt(input);
+            if (odds > 0) {
+              pct = 100 / (odds + 100) * 100;
+            } else {
+              pct = Math.abs(odds) / (Math.abs(odds) + 100) * 100;
+            }
+          }
+          pct = Math.max(1, Math.min(99, pct)); // Clamp between 1-99%
+          setUserPregame(gameKey, pct / 100);
+        }
+      }
+    }
+    
     // Track scores for goal detection
     let previousScores = {};
     let goalFlashGames = {}; // { gameId: timestamp when flash started }
@@ -1452,79 +1484,20 @@
       // Handle pregame price locking
       let pregameHome, pregameAway;
       
-      // Always try to get pregame from Odds API first (most reliable pregame source)
-      const oddsApiKey = `${g.awayAbbrev}-${g.homeAbbrev}`;
-      const rawOdds = oddsApiRawData[oddsApiKey];
-      const devigged = getDeviggedOdds(g.homeAbbrev, g.awayAbbrev);
-      
-      if (g.state === 'FUT') {
-        // Game hasn't started - use devigged or Odds API pregame line
-        if (devigged) {
-          pregameHome = devigged.homeProb;
-          pregameAway = devigged.awayProb;
-        } else if (rawOdds) {
-          // Calculate average from sportsbooks and normalize
-          let totalHome = 0, totalAway = 0, count = 0;
-          for (const book of Object.values(rawOdds.books)) {
-            totalHome += book.homeProb;
-            totalAway += book.awayProb;
-            count++;
-          }
-          if (count > 0) {
-            const avgHome = totalHome / count;
-            const avgAway = totalAway / count;
-            const total = avgHome + avgAway;
-            pregameHome = avgHome / total;
-            pregameAway = avgAway / total;
-          } else {
-            pregameHome = kalshiHome || 0.50;
-            pregameAway = kalshiAway || 0.50;
-          }
-        } else {
-          // Fallback to Kalshi
-          pregameHome = kalshiHome || 0.50;
-          pregameAway = kalshiAway || 0.50;
-        }
-        
-        // Store as potential lock price (will be locked when game goes live)
+      // Check for user-entered pregame price first
+      if (userPregamePrices[gameKey]) {
+        pregameHome = userPregamePrices[gameKey].home;
+        pregameAway = userPregamePrices[gameKey].away;
         lockedPregamePrices[gameKey] = { home: pregameHome, away: pregameAway };
+      } else if (lockedPregamePrices[gameKey]) {
+        // Use already locked price
+        pregameHome = lockedPregamePrices[gameKey].home;
+        pregameAway = lockedPregamePrices[gameKey].away;
       } else {
-        // Game is LIVE or FINAL - use locked pregame price
-        if (lockedPregamePrices[gameKey]) {
-          pregameHome = lockedPregamePrices[gameKey].home;
-          pregameAway = lockedPregamePrices[gameKey].away;
-        } else {
-          // No locked price (app started after game went live)
-          // Use Odds API pregame line
-          if (devigged) {
-            pregameHome = devigged.homeProb;
-            pregameAway = devigged.awayProb;
-          } else if (rawOdds) {
-            let totalHome = 0, totalAway = 0, count = 0;
-            for (const book of Object.values(rawOdds.books)) {
-              totalHome += book.homeProb;
-              totalAway += book.awayProb;
-              count++;
-            }
-            if (count > 0) {
-              const avgHome = totalHome / count;
-              const avgAway = totalAway / count;
-              const total = avgHome + avgAway;
-              pregameHome = avgHome / total;
-              pregameAway = avgAway / total;
-            } else {
-              pregameHome = 0.50;
-              pregameAway = 0.50;
-            }
-          } else {
-            // No odds data available - default to 50/50
-            pregameHome = 0.50;
-            pregameAway = 0.50;
-          }
-          
-          // Lock it now so it doesn't change
-          lockedPregamePrices[gameKey] = { home: pregameHome, away: pregameAway };
-        }
+        // Default to 50/50 - user should set it
+        pregameHome = 0.50;
+        pregameAway = 0.50;
+        lockedPregamePrices[gameKey] = { home: pregameHome, away: pregameAway };
       }
       
       // Calculate FMV based on pregame and current game state
@@ -1556,7 +1529,8 @@
       const sbHomeOdds = sportsbook?.homeOdds || null;
       const sbAwayOdds = sportsbook?.awayOdds || null;
       
-      // Get devigged consensus odds (already fetched above)
+      // Get devigged consensus odds
+      const devigged = getDeviggedOdds(g.homeAbbrev, g.awayAbbrev);
       const devigHome = devigged?.homeProb || null;
       const devigAway = devigged?.awayProb || null;
       const devigBooksUsed = devigged?.booksUsed || 0;
@@ -2468,10 +2442,10 @@
                     <div class="font-semibold text-sm text-gray-100 tracking-tight">${away.name}</div>
                     <div class="text-xs text-gray-500">
                       <div class="truncate">
-                        ${fmv.bestLineOdds?.away ? `<span class="text-amber-400">Best:</span> <span class="mono text-amber-400">${fmv.bestLineOdds.away.odds > 0 ? '+' : ''}${fmv.bestLineOdds.away.odds}</span> <span class="text-gray-600">(${fmv.bestLineOdds.away.abbrev})</span>` : `Pre: <span class="mono">${fmtOdds(fmv.pregameAway)}</span>`}${fmv.isLocked ? ' 🔒' : ''}
+                        <span class="cursor-pointer hover:text-amber-400" onclick="promptPregame('${g.homeAbbrev}-${g.awayAbbrev}', '${home.name}', ${fmv.pregameHome})">Pre: <span class="mono">${fmtOdds(fmv.pregameAway)}</span></span>${fmv.isLocked ? ' 🔒' : ' ✏️'}
                         ${fmv.arb ? `<span class="ml-2 text-green-400 font-semibold">ARB: ${fmv.arb.awayBook} ${fmv.arb.awayOdds > 0 ? '+' : ''}${fmv.arb.awayOdds}</span>` : ''}
                       </div>
-                      ${fmv.devigAway || fmv.polyAway || fmv.kalshiAway ? `<div>${fmv.devigAway ? `<span class="text-purple-400">DV: <span class="mono">${fmtOdds(fmv.devigAway)}</span></span>` : ''}${fmv.polyAway ? `<span class="${fmv.devigAway ? 'ml-2' : ''} text-pink-400">PM: <span class="mono">${fmtOdds(fmv.polyAway)}</span></span>` : ''}${fmv.kalshiAway ? `<span class="ml-2 text-blue-400">K: <span class="mono">${fmtOdds(fmv.kalshiAway)}</span></span>` : ''}</div>` : ''}
+                      ${fmv.polyAway || fmv.kalshiAway ? `<div>${fmv.polyAway ? `<span class="text-pink-400">PM: <span class="mono">${fmtOdds(fmv.polyAway)}</span></span>` : ''}${fmv.kalshiAway ? `<span class="${fmv.polyAway ? 'ml-2' : ''} text-blue-400">K: <span class="mono">${fmtOdds(fmv.kalshiAway)}</span></span>` : ''}</div>` : ''}
                     </div>
                   </div>
                   <div class="text-2xl font-bold w-10 text-center text-gray-100 flex-shrink-0 mono">${g.state === 'FUT' ? '-' : g.awayScore}</div>
@@ -2491,10 +2465,10 @@
                     <div class="font-semibold text-sm text-gray-100 tracking-tight">${home.name}</div>
                     <div class="text-xs text-gray-500">
                       <div class="truncate">
-                        ${fmv.bestLineOdds?.home ? `<span class="text-amber-400">Best:</span> <span class="mono text-amber-400">${fmv.bestLineOdds.home.odds > 0 ? '+' : ''}${fmv.bestLineOdds.home.odds}</span> <span class="text-gray-600">(${fmv.bestLineOdds.home.abbrev})</span>` : `Pre: <span class="mono">${fmtOdds(fmv.pregameHome)}</span>`}${fmv.isLocked ? ' 🔒' : ''}
+                        <span class="cursor-pointer hover:text-amber-400" onclick="promptPregame('${g.homeAbbrev}-${g.awayAbbrev}', '${home.name}', ${fmv.pregameHome})">Pre: <span class="mono">${fmtOdds(fmv.pregameHome)}</span></span>${fmv.isLocked ? ' 🔒' : ' ✏️'}
                         ${fmv.arb ? `<span class="ml-2 text-green-400 font-semibold">ARB: ${fmv.arb.homeBook} ${fmv.arb.homeOdds > 0 ? '+' : ''}${fmv.arb.homeOdds}</span>` : ''}
                       </div>
-                      ${fmv.devigHome || fmv.polyHome || fmv.kalshiHome ? `<div>${fmv.devigHome ? `<span class="text-purple-400">DV: <span class="mono">${fmtOdds(fmv.devigHome)}</span></span>` : ''}${fmv.polyHome ? `<span class="${fmv.devigHome ? 'ml-2' : ''} text-pink-400">PM: <span class="mono">${fmtOdds(fmv.polyHome)}</span></span>` : ''}${fmv.kalshiHome ? `<span class="ml-2 text-blue-400">K: <span class="mono">${fmtOdds(fmv.kalshiHome)}</span></span>` : ''}</div>` : ''}
+                      ${fmv.polyHome || fmv.kalshiHome ? `<div>${fmv.polyHome ? `<span class="text-pink-400">PM: <span class="mono">${fmtOdds(fmv.polyHome)}</span></span>` : ''}${fmv.kalshiHome ? `<span class="${fmv.polyHome ? 'ml-2' : ''} text-blue-400">K: <span class="mono">${fmtOdds(fmv.kalshiHome)}</span></span>` : ''}</div>` : ''}
                     </div>
                   </div>
                   <div class="text-2xl font-bold w-10 text-center text-gray-100 flex-shrink-0 mono">${g.state === 'FUT' ? '-' : g.homeScore}</div>
