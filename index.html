@@ -1543,7 +1543,8 @@
 
     // Fetch games from ESPN API
     async function fetchGames() {
-      const espnUrl = 'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard';
+      const timestamp = Date.now();
+      const espnUrl = `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?_t=${timestamp}`;
       
       const proxyUrls = [
         espnUrl, // Try direct first
@@ -1665,6 +1666,9 @@
       render();
     }
     
+    // Store ESPN debug info
+    let espnDebugInfo = '';
+    
     // Parse ESPN API data
     function parseESPNData(data) {
       if (!data?.events) return [];
@@ -1682,6 +1686,7 @@
         const status = competition.status;
         const statusType = status?.type?.name; // 'STATUS_SCHEDULED', 'STATUS_IN_PROGRESS', 'STATUS_FINAL', etc.
         const statusState = status?.type?.state; // 'pre', 'in', 'post'
+        const statusDetail = status?.type?.detail; // e.g., "1st - 10:22", "Final"
         
         let state = 'FUT';
         if (statusState === 'in' || statusType === 'STATUS_IN_PROGRESS') {
@@ -1690,13 +1695,27 @@
           state = 'FINAL';
         }
         
-        // Get period and clock
-        const period = status?.period || 0;
-        const clock = status?.displayClock || '20:00';
+        // Get period and clock from status
+        let period = status?.period || 0;
+        let clock = status?.displayClock || '20:00';
+        
+        // ESPN sometimes has the clock in a different format, try to extract from detail
+        if (statusDetail && state === 'LIVE') {
+          const detailMatch = statusDetail.match(/(\d+)(?:st|nd|rd|th)?\s*[-–]?\s*(\d+:\d+)/i);
+          if (detailMatch) {
+            period = parseInt(detailMatch[1]) || period;
+            clock = detailMatch[2] || clock;
+          }
+        }
         
         // Map ESPN team abbreviations to our format
         const homeAbbrev = mapESPNAbbrev(homeTeam.team?.abbreviation);
         const awayAbbrev = mapESPNAbbrev(awayTeam.team?.abbreviation);
+        
+        // Store debug info for first live game
+        if (state === 'LIVE' && !espnDebugInfo) {
+          espnDebugInfo = `${awayAbbrev}@${homeAbbrev}: period=${status?.period}, clock=${status?.displayClock}, detail=${statusDetail}`;
+        }
         
         const startTimeRaw = event.date ? new Date(event.date).getTime() : 0;
         
@@ -2461,7 +2480,8 @@
           </div>
           <div class="max-w-lg mx-auto mt-4 p-3 bg-black/30 rounded-lg">
             <div class="text-xs text-gray-400 mb-2">NHL Games State (${games.length}):</div>
-            <div class="text-xs text-cyan-400 font-mono break-all mb-3">${games.length > 0 ? games.map(g => `${g.awayAbbrev}@${g.homeAbbrev}:${g.state}(${g.rawState || '?'}):P${g.period}:${g.awayScore}-${g.homeScore}`).join(', ') : 'No games loaded'}</div>
+            <div class="text-xs text-cyan-400 font-mono break-all mb-3">${games.length > 0 ? games.map(g => `${g.awayAbbrev}@${g.homeAbbrev}:${g.state}(${g.rawState || '?'}):P${g.period}:${g.clock}:${g.awayScore}-${g.homeScore}`).join(', ') : 'No games loaded'}</div>
+            ${espnDebugInfo ? `<div class="text-xs text-gray-400">ESPN Raw:</div><div class="text-xs text-orange-400 font-mono mb-3">${espnDebugInfo}</div>` : ''}
             <div class="text-xs text-gray-400">Kalshi Keys (${Object.keys(kalshiMarkets).length}):</div>
             <div class="text-xs text-blue-400 font-mono break-all mb-3">${Object.keys(kalshiMarkets).length > 0 ? Object.keys(kalshiMarkets).map(k => {
               const m = kalshiMarkets[k];
