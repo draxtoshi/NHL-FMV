@@ -1446,10 +1446,39 @@
       // Handle pregame price locking
       let pregameHome, pregameAway;
       
+      // Always try to get pregame from Odds API first (most reliable pregame source)
+      const oddsApiKey = `${g.awayAbbrev}-${g.homeAbbrev}`;
+      const rawOdds = oddsApiRawData[oddsApiKey];
+      const devigged = getDeviggedOdds(g.homeAbbrev, g.awayAbbrev);
+      
       if (g.state === 'FUT') {
-        // Game hasn't started - use current Kalshi price as pregame
-        pregameHome = kalshiHome || 0.50;
-        pregameAway = kalshiAway || 0.50;
+        // Game hasn't started - use devigged or Odds API pregame line
+        if (devigged) {
+          pregameHome = devigged.homeProb;
+          pregameAway = devigged.awayProb;
+        } else if (rawOdds) {
+          // Calculate average from sportsbooks and normalize
+          let totalHome = 0, totalAway = 0, count = 0;
+          for (const book of Object.values(rawOdds.books)) {
+            totalHome += book.homeProb;
+            totalAway += book.awayProb;
+            count++;
+          }
+          if (count > 0) {
+            const avgHome = totalHome / count;
+            const avgAway = totalAway / count;
+            const total = avgHome + avgAway;
+            pregameHome = avgHome / total;
+            pregameAway = avgAway / total;
+          } else {
+            pregameHome = kalshiHome || 0.50;
+            pregameAway = kalshiAway || 0.50;
+          }
+        } else {
+          // Fallback to Kalshi
+          pregameHome = kalshiHome || 0.50;
+          pregameAway = kalshiAway || 0.50;
+        }
         
         // Store as potential lock price (will be locked when game goes live)
         lockedPregamePrices[gameKey] = { home: pregameHome, away: pregameAway };
@@ -1459,9 +1488,34 @@
           pregameHome = lockedPregamePrices[gameKey].home;
           pregameAway = lockedPregamePrices[gameKey].away;
         } else {
-          // No locked price (app started after game went live) - use 50/50 or Kalshi
-          pregameHome = kalshiHome || 0.50;
-          pregameAway = kalshiAway || 0.50;
+          // No locked price (app started after game went live)
+          // Use Odds API pregame line
+          if (devigged) {
+            pregameHome = devigged.homeProb;
+            pregameAway = devigged.awayProb;
+          } else if (rawOdds) {
+            let totalHome = 0, totalAway = 0, count = 0;
+            for (const book of Object.values(rawOdds.books)) {
+              totalHome += book.homeProb;
+              totalAway += book.awayProb;
+              count++;
+            }
+            if (count > 0) {
+              const avgHome = totalHome / count;
+              const avgAway = totalAway / count;
+              const total = avgHome + avgAway;
+              pregameHome = avgHome / total;
+              pregameAway = avgAway / total;
+            } else {
+              pregameHome = 0.50;
+              pregameAway = 0.50;
+            }
+          } else {
+            // No odds data available - default to 50/50
+            pregameHome = 0.50;
+            pregameAway = 0.50;
+          }
+          
           // Lock it now so it doesn't change
           lockedPregamePrices[gameKey] = { home: pregameHome, away: pregameAway };
         }
