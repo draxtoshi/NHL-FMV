@@ -1580,12 +1580,21 @@
         games = allGames;
         isLive = true;
         
-        // Sort by start time (FUT games first by time, then LIVE, then FINAL)
+        // Sort: LIVE games first (by time remaining), then FUT (by start time), then FINAL
         games.sort((a, b) => {
-          const stateOrder = { 'FUT': 0, 'LIVE': 1, 'FINAL': 2 };
+          const stateOrder = { 'LIVE': 0, 'FUT': 1, 'FINAL': 2 };
           if (stateOrder[a.state] !== stateOrder[b.state]) {
             return stateOrder[a.state] - stateOrder[b.state];
           }
+          
+          // For LIVE games, sort by time remaining (least time = closest to end = first)
+          if (a.state === 'LIVE') {
+            const aSecsRemaining = calcSeconds(a.period, a.clock);
+            const bSecsRemaining = calcSeconds(b.period, b.clock);
+            return aSecsRemaining - bSecsRemaining; // Less time remaining = higher priority
+          }
+          
+          // For FUT and FINAL, sort by start time
           return (a.startTimeRaw || 0) - (b.startTimeRaw || 0);
         });
           
