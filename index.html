@@ -1138,23 +1138,25 @@
       const awayVariants = [awayAbbrev, getKalshiAbbrev(awayAbbrev)];
       
       // Log available keys for debugging
-      console.log(`Looking for ${awayAbbrev}@${homeAbbrev}, variants: away=[${awayVariants}], home=[${homeVariants}], available keys:`, Object.keys(kalshiMarkets));
+      console.log(`Kalshi lookup: ${awayAbbrev}@${homeAbbrev}, variants: away=[${awayVariants}], home=[${homeVariants}]`);
       
-      // Try all combinations
+      // Try all combinations - NOTE: Kalshi ticker appears to be {home}{away} format
       for (const away of awayVariants) {
         for (const home of homeVariants) {
+          // Try away-home format (team1=away, team2=home)
           const key1 = `${away}-${home}`;
           if (kalshiMarkets[key1]) {
-            console.log(`Found match: ${key1}`);
+            console.log(`Kalshi found: ${key1}, team1=${kalshiMarkets[key1].team1Abbrev}=${(kalshiMarkets[key1].team1Prob*100).toFixed(0)}%, team2=${kalshiMarkets[key1].team2Abbrev}=${(kalshiMarkets[key1].team2Prob*100).toFixed(0)}%`);
             return { 
               awayProb: kalshiMarkets[key1].team1Prob, 
               homeProb: kalshiMarkets[key1].team2Prob 
             };
           }
           
+          // Try home-away format (team1=home, team2=away)
           const key2 = `${home}-${away}`;
           if (kalshiMarkets[key2]) {
-            console.log(`Found match (reversed): ${key2}`);
+            console.log(`Kalshi found (reversed): ${key2}, team1=${kalshiMarkets[key2].team1Abbrev}=${(kalshiMarkets[key2].team1Prob*100).toFixed(0)}%, team2=${kalshiMarkets[key2].team2Abbrev}=${(kalshiMarkets[key2].team2Prob*100).toFixed(0)}%`);
             return { 
               awayProb: kalshiMarkets[key2].team2Prob, 
               homeProb: kalshiMarkets[key2].team1Prob 
