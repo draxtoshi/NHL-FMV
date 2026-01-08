@@ -150,14 +150,14 @@
       'WPG': { name: 'Winnipeg Jets', primary: '#041E42' }
     };
 
-    // Bernier model
+    // Bernier model - realistic NHL comeback rates (lookup table)
     const BASE_WIN_PROB = {
       0: { 3600: 0.50, 2400: 0.50, 1200: 0.50, 0: 0.50 },
-      1: { 3600: 0.27, 2400: 0.23, 1200: 0.17, 0: 0.00 },
-      2: { 3600: 0.10, 2400: 0.07, 1200: 0.04, 0: 0.00 },
-      3: { 3600: 0.03, 2400: 0.02, 1200: 0.01, 0: 0.00 },
-      4: { 3600: 0.01, 2400: 0.005, 1200: 0.002, 0: 0.00 },
-      5: { 3600: 0.003, 2400: 0.001, 1200: 0.0005, 0: 0.00 }
+      1: { 3600: 0.36, 2400: 0.32, 1200: 0.25, 0: 0.00 },
+      2: { 3600: 0.18, 2400: 0.14, 1200: 0.10, 0: 0.00 },
+      3: { 3600: 0.08, 2400: 0.05, 1200: 0.03, 0: 0.00 },
+      4: { 3600: 0.03, 2400: 0.015, 1200: 0.008, 0: 0.00 },
+      5: { 3600: 0.01, 2400: 0.005, 1200: 0.002, 0: 0.00 }
     };
 
     function interpolate(table, seconds) {
@@ -171,10 +171,32 @@
       return seconds >= 3600 ? table[3600] : table[0];
     }
 
-    function calcWinProb(pregameProb, deficit, seconds) {
+    // Exponential decay model for comeback probability
+    function calcExpDecayProb(pregameProb, deficit, seconds) {
+      if (deficit === 0) return pregameProb;
+      const k = 0.75; // decay coefficient
+      const timeFactor = Math.sqrt(seconds / 3600);
+      return pregameProb * Math.exp(-k * Math.abs(deficit) * timeFactor);
+    }
+
+    // Lookup table model with pregame adjustment
+    function calcTableProb(pregameProb, deficit, seconds) {
       const d = Math.min(Math.abs(deficit), 5);
       const baseProb = interpolate(BASE_WIN_PROB[d], seconds);
       return Math.max(0, Math.min(1, baseProb + 0.50 * (pregameProb - 0.50)));
+    }
+
+    // Weighted aggregate of both models (60% table, 40% exponential)
+    function calcWinProb(pregameProb, deficit, seconds) {
+      if (deficit === 0) return pregameProb;
+      
+      const tableProb = calcTableProb(pregameProb, deficit, seconds);
+      const expProb = calcExpDecayProb(pregameProb, deficit, seconds);
+      
+      // Weight: 60% lookup table, 40% exponential decay
+      const weightedProb = 0.6 * tableProb + 0.4 * expProb;
+      
+      return Math.max(0.001, Math.min(0.999, weightedProb));
     }
 
     function calcSeconds(period, clock) {
