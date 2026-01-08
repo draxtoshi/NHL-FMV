@@ -1541,189 +1541,198 @@
       };
     }
 
-    // Fetch games
+    // Fetch games from ESPN API
     async function fetchGames() {
-      // Get today's date in YYYY-MM-DD format
-      const today = new Date().toISOString().split('T')[0];
+      const espnUrl = 'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard';
       
-      const scoreUrl = 'https://api-web.nhle.com/v1/score/now';
-      const scheduleUrl = `https://api-web.nhle.com/v1/schedule/${today}`;
-      
-      const proxyUrls = (url) => [
-        url, // Try direct first
-        'https://corsproxy.io/?' + encodeURIComponent(url),
-        'https://api.allorigins.win/raw?url=' + encodeURIComponent(url)
+      const proxyUrls = [
+        espnUrl, // Try direct first
+        'https://corsproxy.io/?' + encodeURIComponent(espnUrl),
+        'https://api.allorigins.win/raw?url=' + encodeURIComponent(espnUrl)
       ];
 
-      let allGames = [];
-      let seenGameIds = new Set();
-      
-      // Fetch from /score/now first (has live game data)
-      for (const url of proxyUrls(scoreUrl)) {
+      for (const url of proxyUrls) {
         try {
           const res = await fetch(url);
           if (!res.ok) continue;
           const data = await res.json();
-          const scoreGames = parseNHLData(data);
-          scoreGames.forEach(g => {
-            if (!seenGameIds.has(g.id)) {
-              seenGameIds.add(g.id);
-              allGames.push(g);
-            }
-          });
-          console.log('Score/now fetched:', scoreGames.length, 'games');
-          break; // Success
-        } catch (e) {
-          console.log('Score fetch failed for:', url, e);
-          continue;
-        }
-      }
-      
-      // Also fetch from /schedule/{today} for any games not in /score/now
-      for (const url of proxyUrls(scheduleUrl)) {
-        try {
-          const res = await fetch(url);
-          if (!res.ok) continue;
-          const data = await res.json();
-          const scheduleGames = parseScheduleData(data, today);
-          let addedCount = 0;
-          scheduleGames.forEach(g => {
-            if (!seenGameIds.has(g.id)) {
-              seenGameIds.add(g.id);
-              allGames.push(g);
-              addedCount++;
-            }
-          });
-          console.log('Schedule fetched:', scheduleGames.length, 'games,', addedCount, 'new');
-          break; // Success
-        } catch (e) {
-          console.log('Schedule fetch failed for:', url, e);
-          continue;
-        }
-      }
-      
-      if (allGames.length > 0) {
-        games = allGames;
-        isLive = true;
-        
-        // Sort: LIVE games first (by time remaining), then FUT (by start time), then FINAL
-        games.sort((a, b) => {
-          const stateOrder = { 'LIVE': 0, 'FUT': 1, 'FINAL': 2 };
-          if (stateOrder[a.state] !== stateOrder[b.state]) {
-            return stateOrder[a.state] - stateOrder[b.state];
-          }
+          const espnGames = parseESPNData(data);
           
-          // For LIVE games, sort by time remaining (least time = closest to end = first)
-          if (a.state === 'LIVE') {
-            const aSecsRemaining = calcSeconds(a.period, a.clock);
-            const bSecsRemaining = calcSeconds(b.period, b.clock);
-            return aSecsRemaining - bSecsRemaining; // Less time remaining = higher priority
-          }
-          
-          // For FUT and FINAL, sort by start time
-          return (a.startTimeRaw || 0) - (b.startTimeRaw || 0);
-        });
-        
-        console.log('After sort, first 3 games:', games.slice(0, 3).map(g => `${g.awayAbbrev}@${g.homeAbbrev}:${g.state}`));
-          
-        // Detect events and generate alerts
-        games.forEach(g => {
-            const prev = previousGameStates[g.id];
-            const prevScore = previousScores[g.id];
-            const currentTotal = g.homeScore + g.awayScore;
-            const home = TEAMS[g.homeAbbrev] || { name: g.homeAbbrev };
-            const away = TEAMS[g.awayAbbrev] || { name: g.awayAbbrev };
-            const fmv = calcGameFMV(g);
+          if (espnGames.length > 0) {
+            games = espnGames;
+            isLive = true;
+            console.log('ESPN fetched:', espnGames.length, 'games');
             
-            if (alertSettings.enabled && prev) {
-              // Game Start Alert
-              if (alertSettings.gameStart && prev.state === 'FUT' && g.state === 'LIVE') {
-                addAlert('start', `🏒 Game Started: ${away.name} @ ${home.name}`, g.id);
+            // Sort: LIVE games first (by time remaining), then FUT (by start time), then FINAL
+            games.sort((a, b) => {
+              const stateOrder = { 'LIVE': 0, 'FUT': 1, 'FINAL': 2 };
+              if (stateOrder[a.state] !== stateOrder[b.state]) {
+                return stateOrder[a.state] - stateOrder[b.state];
               }
               
-              // Period End Alert
-              if (alertSettings.periodEnd && prev.period !== g.period && g.period > 1) {
-                const periodName = prev.period === 1 ? '1st' : prev.period === 2 ? '2nd' : prev.period === 3 ? '3rd' : 'OT';
-                addAlert('period', `⏱️ End of ${periodName}: ${away.name} ${g.awayScore} - ${home.name} ${g.homeScore}`, g.id);
+              // For LIVE games, sort by time remaining (least time = closest to end = first)
+              if (a.state === 'LIVE') {
+                const aSecsRemaining = calcSeconds(a.period, a.clock);
+                const bSecsRemaining = calcSeconds(b.period, b.clock);
+                return aSecsRemaining - bSecsRemaining;
               }
               
-              // Goal Alert
-              if (alertSettings.goals && prevScore !== undefined && currentTotal > prevScore) {
+              // For FUT and FINAL, sort by start time
+              return (a.startTimeRaw || 0) - (b.startTimeRaw || 0);
+            });
+            
+            console.log('After sort, first 3 games:', games.slice(0, 3).map(g => `${g.awayAbbrev}@${g.homeAbbrev}:${g.state}`));
+            
+            // Detect events and generate alerts
+            games.forEach(g => {
+              const prev = previousGameStates[g.id];
+              const prevScore = previousScores[g.id];
+              const currentTotal = g.homeScore + g.awayScore;
+              const home = TEAMS[g.homeAbbrev] || { name: g.homeAbbrev };
+              const away = TEAMS[g.awayAbbrev] || { name: g.awayAbbrev };
+              const fmv = calcGameFMV(g);
+              
+              if (alertSettings.enabled && prev) {
+                // Game Start Alert
+                if (prev.state === 'FUT' && g.state === 'LIVE' && alertSettings.gameStart) {
+                  addAlert('start', `🏒 ${away.name} @ ${home.name} has started!`, g.id);
+                }
+                
+                // Period Change Alert
+                if (g.state === 'LIVE' && prev.period !== g.period && g.period > prev.period && alertSettings.periodChange) {
+                  const periodName = g.period === 2 ? '2nd' : g.period === 3 ? '3rd' : g.period > 3 ? 'OT' : '';
+                  if (periodName) {
+                    addAlert('period', `⏱️ ${away.name} @ ${home.name}: ${periodName} period starting`, g.id);
+                  }
+                }
+                
+                // Game End Alert
+                if (prev.state === 'LIVE' && g.state === 'FINAL' && alertSettings.gameEnd) {
+                  const winner = g.homeScore > g.awayScore ? home.name : away.name;
+                  addAlert('end', `🏁 Final: ${away.name} ${g.awayScore} - ${g.homeScore} ${home.name}. ${winner} wins!`, g.id);
+                }
+              }
+              
+              // Goal detection
+              if (prevScore !== undefined && currentTotal > prevScore) {
                 goalFlashGames[g.id] = Date.now();
-                const scorer = g.homeScore > prev.homeScore ? home.name : away.name;
-                addAlert('goal', `🚨 GOAL! ${scorer} scores - ${away.name} ${g.awayScore}, ${home.name} ${g.homeScore}`, g.id);
+                
+                if (alertSettings.enabled && alertSettings.goalScored) {
+                  const goalDiff = currentTotal - prevScore;
+                  const homeScored = g.homeScore > (prev?.homeScore || 0);
+                  const scorer = homeScored ? home.name : away.name;
+                  addAlert('goal', `🚨 GOAL! ${scorer} scores! (${g.awayScore}-${g.homeScore})`, g.id, `goal-${g.id}-${currentTotal}`);
+                }
               }
               
               // EV Alert
-              if (alertSettings.evAlert && g.state === 'LIVE') {
-                if (fmv.evHome && +fmv.evHome >= alertSettings.minEV) {
-                  const alertKey = `ev-${g.id}-home-${Math.floor(+fmv.evHome)}`;
-                  if (!alerts.find(a => a.key === alertKey)) {
-                    addAlert('ev', `💰 +EV: ${home.name} FMV ${(fmv.fmvHome*100).toFixed(0)}% vs Kalshi ${(fmv.kalshiHome*100).toFixed(0)}% (+${fmv.evHome}%)`, g.id, alertKey);
+              if (alertSettings.enabled && alertSettings.evThreshold && g.state === 'LIVE') {
+                const threshold = alertSettings.evThreshold;
+                if (fmv.evHome && +fmv.evHome >= threshold) {
+                  const evKey = `ev-${g.id}-home-${Math.floor(+fmv.evHome / 5) * 5}`;
+                  if (!alerts.find(a => a.key === evKey)) {
+                    addAlert('ev', `💰 ${home.name} +${fmv.evHome}% EV vs Kalshi`, g.id, evKey);
                   }
                 }
-                if (fmv.evAway && +fmv.evAway >= alertSettings.minEV) {
-                  const alertKey = `ev-${g.id}-away-${Math.floor(+fmv.evAway)}`;
-                  if (!alerts.find(a => a.key === alertKey)) {
-                    addAlert('ev', `💰 +EV: ${away.name} FMV ${(fmv.fmvAway*100).toFixed(0)}% vs Kalshi ${(fmv.kalshiAway*100).toFixed(0)}% (+${fmv.evAway}%)`, g.id, alertKey);
+                if (fmv.evAway && +fmv.evAway >= threshold) {
+                  const evKey = `ev-${g.id}-away-${Math.floor(+fmv.evAway / 5) * 5}`;
+                  if (!alerts.find(a => a.key === evKey)) {
+                    addAlert('ev', `💰 ${away.name} +${fmv.evAway}% EV vs Kalshi`, g.id, evKey);
                   }
                 }
-              }
-            }
-            
-            // Update previous states
-            previousScores[g.id] = currentTotal;
-            previousGameStates[g.id] = { 
-              state: g.state, 
-              period: g.period, 
-              homeScore: g.homeScore, 
-              awayScore: g.awayScore 
-            };
-            
-            if (g.state === 'LIVE') {
-              const h = gameHistories[g.id] || [];
-              const np = { home: Math.round(fmv.fmvHome * 100), away: Math.round(fmv.fmvAway * 100) };
-              const last = h[h.length - 1];
-              // Always add first point, then only add if changed by 1%
-              if (h.length === 0 || !last || Math.abs(last.home - np.home) >= 1) {
-                gameHistories[g.id] = [...h.slice(-30), np];
               }
               
-              // If we just joined a live game, fetch play-by-play to reconstruct history
-              if (h.length <= 1) {
+              // Update previous states
+              previousGameStates[g.id] = { state: g.state, period: g.period, homeScore: g.homeScore, awayScore: g.awayScore };
+              previousScores[g.id] = currentTotal;
+            });
+            
+            // Fetch play-by-play for live/final games
+            games.forEach(g => {
+              if (g.state === 'LIVE' || g.state === 'FINAL') {
                 fetchPlayByPlay(g.id, g.homeAbbrev, g.awayAbbrev);
               }
-            }
-            
-            // Fetch play-by-play for finished games to reconstruct history
-            if (g.state === 'FINAL' && (!gameHistories[g.id] || gameHistories[g.id].length <= 2)) {
-              fetchPlayByPlay(g.id, g.homeAbbrev, g.awayAbbrev);
-            }
-          });
+            });
+          }
           
-          // Clean up expired alerts and goal flashes
-          const now = Date.now();
-          alerts = alerts.filter(a => now - a.timestamp < alertSettings.alertDuration * 1000);
-          Object.keys(goalFlashGames).forEach(id => {
-            if (now - goalFlashGames[id] > 10000) {
-              delete goalFlashGames[id];
-            }
-          });
-          
-          lastUpdate = new Date();
-          render();
-          return; // Success, exit
+          break; // Success
+        } catch (e) {
+          console.log('ESPN fetch failed:', url, e);
+          continue;
+        }
       }
       
-      // All failed, use demo
-      console.error('All API attempts failed, using demo data');
-      isLive = false;
-      if (games.length === 0) {
-        games = getDemoGames();
-        gameHistories = { 'demo1': generateDemoHistory(35), 'demo2': generateDemoHistory(82) };
-      }
-      lastUpdate = new Date();
       render();
+    }
+    
+    // Parse ESPN API data
+    function parseESPNData(data) {
+      if (!data?.events) return [];
+      
+      return data.events.map(event => {
+        const competition = event.competitions?.[0];
+        if (!competition) return null;
+        
+        const homeTeam = competition.competitors?.find(c => c.homeAway === 'home');
+        const awayTeam = competition.competitors?.find(c => c.homeAway === 'away');
+        
+        if (!homeTeam || !awayTeam) return null;
+        
+        // Get game status
+        const status = competition.status;
+        const statusType = status?.type?.name; // 'STATUS_SCHEDULED', 'STATUS_IN_PROGRESS', 'STATUS_FINAL', etc.
+        const statusState = status?.type?.state; // 'pre', 'in', 'post'
+        
+        let state = 'FUT';
+        if (statusState === 'in' || statusType === 'STATUS_IN_PROGRESS') {
+          state = 'LIVE';
+        } else if (statusState === 'post' || statusType === 'STATUS_FINAL') {
+          state = 'FINAL';
+        }
+        
+        // Get period and clock
+        const period = status?.period || 0;
+        const clock = status?.displayClock || '20:00';
+        
+        // Map ESPN team abbreviations to our format
+        const homeAbbrev = mapESPNAbbrev(homeTeam.team?.abbreviation);
+        const awayAbbrev = mapESPNAbbrev(awayTeam.team?.abbreviation);
+        
+        const startTimeRaw = event.date ? new Date(event.date).getTime() : 0;
+        
+        return {
+          id: event.id,
+          homeAbbrev,
+          awayAbbrev,
+          homeScore: parseInt(homeTeam.score) || 0,
+          awayScore: parseInt(awayTeam.score) || 0,
+          period,
+          clock,
+          state,
+          rawState: statusType,
+          startTime: event.date ? new Date(event.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '',
+          startTimeRaw
+        };
+      }).filter(g => g !== null);
+    }
+    
+    // Map ESPN abbreviations to our standard format
+    function mapESPNAbbrev(abbrev) {
+      const espnMap = {
+        'LA': 'LAK',
+        'SJ': 'SJS',
+        'TB': 'TBL',
+        'NJ': 'NJD',
+        'UTAH': 'UTA',
+        'VGS': 'VGK',
+        'MON': 'MTL',
+        'WAS': 'WSH',
+        'NAS': 'NSH',
+        'WIN': 'WPG',
+        'CLB': 'CBJ',
+        'CAL': 'CGY'
+      };
+      return espnMap[abbrev] || abbrev;
     }
 
     // Draw interactive chart
