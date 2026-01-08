@@ -1042,14 +1042,11 @@
               gameMarkets[gameKey] = { team1, team2 };
             }
             
-            // Use last_price if available, otherwise calculate mid from bid/ask
+            // Use bid/ask mid for current price, fallback to last_price
             // Kalshi prices are in cents (0-100)
             let price;
-            if (m.last_price !== undefined && m.last_price > 0) {
-              // Use last traded price
-              price = m.last_price / 100;
-            } else if (m.yes_bid && m.yes_ask) {
-              // Calculate mid from bid/ask
+            if (m.yes_bid && m.yes_ask) {
+              // Calculate mid from bid/ask (most current)
               price = (m.yes_bid + m.yes_ask) / 2 / 100;
             } else if (m.yes_ask) {
               // Only ask available
@@ -1057,11 +1054,14 @@
             } else if (m.yes_bid) {
               // Only bid available
               price = m.yes_bid / 100;
+            } else if (m.last_price !== undefined && m.last_price > 0) {
+              // Fallback to last traded price
+              price = m.last_price / 100;
             } else {
               price = 0.5; // Default fallback
             }
             
-            console.log(`Kalshi ticker ${m.ticker}: ${winner} = ${(price*100).toFixed(0)}%`);
+            console.log(`Kalshi ticker ${m.ticker}: ${winner} = ${(price*100).toFixed(0)}% (bid=${m.yes_bid}, ask=${m.yes_ask}, last=${m.last_price})`);
             
             if (winner === team1) {
               gameMarkets[gameKey].team1Prob = price;
@@ -2430,6 +2430,11 @@
           <div class="max-w-lg mx-auto mt-4 p-3 bg-black/30 rounded-lg">
             <div class="text-xs text-gray-400 mb-2">NHL Games State (${games.length}):</div>
             <div class="text-xs text-cyan-400 font-mono break-all mb-3">${games.length > 0 ? games.map(g => `${g.awayAbbrev}@${g.homeAbbrev}:${g.state}(${g.rawState || '?'}):P${g.period}:${g.awayScore}-${g.homeScore}`).join(', ') : 'No games loaded'}</div>
+            <div class="text-xs text-gray-400">Kalshi Keys (${Object.keys(kalshiMarkets).length}):</div>
+            <div class="text-xs text-blue-400 font-mono break-all mb-3">${Object.keys(kalshiMarkets).length > 0 ? Object.keys(kalshiMarkets).map(k => {
+              const m = kalshiMarkets[k];
+              return `${k}:${Math.round(m.team1Prob*100)}/${Math.round(m.team2Prob*100)}`;
+            }).join(', ') : 'None loaded'}</div>
             ${Object.keys(oddsApiRawData).length > 0 ? `
             <div class="text-xs text-gray-400">Odds API Keys (${Object.keys(oddsApiRawData).length}):</div>
             <div class="text-xs text-green-400 font-mono break-all mb-3">${Object.keys(oddsApiRawData).join(', ')}</div>
