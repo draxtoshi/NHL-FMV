@@ -1016,7 +1016,13 @@
       for (const url of proxyUrls) {
         try {
           console.log('Trying Kalshi URL:', url.substring(0, 50));
-          const res = await fetch(url);
+          const res = await fetch(url, {
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache'
+            }
+          });
           if (!res.ok) {
             console.log('Kalshi response not ok:', res.status);
             continue;
@@ -1600,14 +1606,19 @@
       const espnUrl = `https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard?_t=${timestamp}`;
       
       const proxyUrls = [
-        espnUrl, // Try direct first
+        espnUrl,
         'https://corsproxy.io/?' + encodeURIComponent(espnUrl),
         'https://api.allorigins.win/raw?url=' + encodeURIComponent(espnUrl)
       ];
-
+      
+      let gamesLoaded = false;
+      
       for (const url of proxyUrls) {
         try {
-          const res = await fetch(url);
+          const res = await fetch(url, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache' }
+          });
           if (!res.ok) continue;
           const data = await res.json();
           const espnGames = parseESPNData(data);
@@ -1615,105 +1626,106 @@
           if (espnGames.length > 0) {
             games = espnGames;
             isLive = true;
-            console.log('ESPN fetched:', espnGames.length, 'games');
-            
-            // Sort: LIVE games first (by time remaining), then FUT (by start time), then FINAL
-            games.sort((a, b) => {
-              const stateOrder = { 'LIVE': 0, 'FUT': 1, 'FINAL': 2 };
-              if (stateOrder[a.state] !== stateOrder[b.state]) {
-                return stateOrder[a.state] - stateOrder[b.state];
-              }
-              
-              // For LIVE games, sort by time remaining (least time = closest to end = first)
-              if (a.state === 'LIVE') {
-                const aSecsRemaining = calcSeconds(a.period, a.clock);
-                const bSecsRemaining = calcSeconds(b.period, b.clock);
-                return aSecsRemaining - bSecsRemaining;
-              }
-              
-              // For FUT and FINAL, sort by start time
-              return (a.startTimeRaw || 0) - (b.startTimeRaw || 0);
-            });
-            
-            console.log('After sort, first 3 games:', games.slice(0, 3).map(g => `${g.awayAbbrev}@${g.homeAbbrev}:${g.state}`));
-            
-            // Detect events and generate alerts
-            games.forEach(g => {
-              const prev = previousGameStates[g.id];
-              const prevScore = previousScores[g.id];
-              const currentTotal = g.homeScore + g.awayScore;
-              const home = TEAMS[g.homeAbbrev] || { name: g.homeAbbrev };
-              const away = TEAMS[g.awayAbbrev] || { name: g.awayAbbrev };
-              const fmv = calcGameFMV(g);
-              
-              if (alertSettings.enabled && prev) {
-                // Game Start Alert
-                if (prev.state === 'FUT' && g.state === 'LIVE' && alertSettings.gameStart) {
-                  addAlert('start', `🏒 ${away.name} @ ${home.name} has started!`, g.id);
-                }
-                
-                // Period Change Alert
-                if (g.state === 'LIVE' && prev.period !== g.period && g.period > prev.period && alertSettings.periodChange) {
-                  const periodName = g.period === 2 ? '2nd' : g.period === 3 ? '3rd' : g.period > 3 ? 'OT' : '';
-                  if (periodName) {
-                    addAlert('period', `⏱️ ${away.name} @ ${home.name}: ${periodName} period starting`, g.id);
-                  }
-                }
-                
-                // Game End Alert
-                if (prev.state === 'LIVE' && g.state === 'FINAL' && alertSettings.gameEnd) {
-                  const winner = g.homeScore > g.awayScore ? home.name : away.name;
-                  addAlert('end', `🏁 Final: ${away.name} ${g.awayScore} - ${g.homeScore} ${home.name}. ${winner} wins!`, g.id);
-                }
-              }
-              
-              // Goal detection
-              if (prevScore !== undefined && currentTotal > prevScore) {
-                goalFlashGames[g.id] = Date.now();
-                
-                if (alertSettings.enabled && alertSettings.goalScored) {
-                  const goalDiff = currentTotal - prevScore;
-                  const homeScored = g.homeScore > (prev?.homeScore || 0);
-                  const scorer = homeScored ? home.name : away.name;
-                  addAlert('goal', `🚨 GOAL! ${scorer} scores! (${g.awayScore}-${g.homeScore})`, g.id, `goal-${g.id}-${currentTotal}`);
-                }
-              }
-              
-              // EV Alert
-              if (alertSettings.enabled && alertSettings.evThreshold && g.state === 'LIVE') {
-                const threshold = alertSettings.evThreshold;
-                if (fmv.evHome && +fmv.evHome >= threshold) {
-                  const evKey = `ev-${g.id}-home-${Math.floor(+fmv.evHome / 5) * 5}`;
-                  if (!alerts.find(a => a.key === evKey)) {
-                    addAlert('ev', `💰 ${home.name} +${fmv.evHome}% EV vs Kalshi`, g.id, evKey);
-                  }
-                }
-                if (fmv.evAway && +fmv.evAway >= threshold) {
-                  const evKey = `ev-${g.id}-away-${Math.floor(+fmv.evAway / 5) * 5}`;
-                  if (!alerts.find(a => a.key === evKey)) {
-                    addAlert('ev', `💰 ${away.name} +${fmv.evAway}% EV vs Kalshi`, g.id, evKey);
-                  }
-                }
-              }
-              
-              // Update previous states
-              previousGameStates[g.id] = { state: g.state, period: g.period, homeScore: g.homeScore, awayScore: g.awayScore };
-              previousScores[g.id] = currentTotal;
-            });
-            
-            // Fetch play-by-play for live/final games
-            games.forEach(g => {
-              if (g.state === 'LIVE' || g.state === 'FINAL') {
-                fetchPlayByPlay(g.id, g.homeAbbrev, g.awayAbbrev);
-              }
-            });
+            gamesLoaded = true;
+            console.log('ESPN API fetched:', espnGames.length, 'games');
+            break;
           }
-          
-          break; // Success
         } catch (e) {
-          console.log('ESPN fetch failed:', url, e);
+          console.log('ESPN fetch failed:', url, e.message);
           continue;
         }
+      }
+      
+      if (gamesLoaded) {
+        // Sort: LIVE games first (by time remaining), then FUT (by start time), then FINAL
+        games.sort((a, b) => {
+          const stateOrder = { 'LIVE': 0, 'FUT': 1, 'FINAL': 2 };
+          if (stateOrder[a.state] !== stateOrder[b.state]) {
+            return stateOrder[a.state] - stateOrder[b.state];
+          }
+          
+          // For LIVE games, sort by time remaining (least time = closest to end = first)
+          if (a.state === 'LIVE') {
+            const aSecsRemaining = calcSeconds(a.period, a.clock);
+            const bSecsRemaining = calcSeconds(b.period, b.clock);
+            return aSecsRemaining - bSecsRemaining;
+          }
+          
+          // For FUT and FINAL, sort by start time
+          return (a.startTimeRaw || 0) - (b.startTimeRaw || 0);
+        });
+        
+        console.log('After sort, first 3 games:', games.slice(0, 3).map(g => `${g.awayAbbrev}@${g.homeAbbrev}:${g.state}:P${g.period}`));
+        
+        // Detect events and generate alerts
+        games.forEach(g => {
+          const prev = previousGameStates[g.id];
+          const prevScore = previousScores[g.id];
+          const currentTotal = g.homeScore + g.awayScore;
+          const home = TEAMS[g.homeAbbrev] || { name: g.homeAbbrev };
+          const away = TEAMS[g.awayAbbrev] || { name: g.awayAbbrev };
+          const fmv = calcGameFMV(g);
+          
+          if (alertSettings.enabled && prev) {
+            // Game Start Alert
+            if (prev.state === 'FUT' && g.state === 'LIVE' && alertSettings.gameStart) {
+              addAlert('start', `🏒 ${away.name} @ ${home.name} has started!`, g.id);
+            }
+            
+            // Period Change Alert
+            if (g.state === 'LIVE' && prev.period !== g.period && g.period > prev.period && alertSettings.periodChange) {
+              const periodName = g.period === 2 ? '2nd' : g.period === 3 ? '3rd' : g.period > 3 ? 'OT' : '';
+              if (periodName) {
+                addAlert('period', `⏱️ ${away.name} @ ${home.name}: ${periodName} period starting`, g.id);
+              }
+            }
+            
+            // Game End Alert
+            if (prev.state === 'LIVE' && g.state === 'FINAL' && alertSettings.gameEnd) {
+              const winner = g.homeScore > g.awayScore ? home.name : away.name;
+              addAlert('end', `🏁 Final: ${away.name} ${g.awayScore} - ${g.homeScore} ${home.name}. ${winner} wins!`, g.id);
+            }
+          }
+          
+          // Goal detection
+          if (prevScore !== undefined && currentTotal > prevScore) {
+            goalFlashGames[g.id] = Date.now();
+            
+            if (alertSettings.enabled && alertSettings.goalScored) {
+              const homeScored = g.homeScore > (prev?.homeScore || 0);
+              const scorer = homeScored ? home.name : away.name;
+              addAlert('goal', `🚨 GOAL! ${scorer} scores! (${g.awayScore}-${g.homeScore})`, g.id, `goal-${g.id}-${currentTotal}`);
+            }
+          }
+          
+          // EV Alert
+          if (alertSettings.enabled && alertSettings.evThreshold && g.state === 'LIVE') {
+            const threshold = alertSettings.evThreshold;
+            if (fmv.evHome && +fmv.evHome >= threshold) {
+              const evKey = `ev-${g.id}-home-${Math.floor(+fmv.evHome / 5) * 5}`;
+              if (!alerts.find(a => a.key === evKey)) {
+                addAlert('ev', `💰 ${home.name} +${fmv.evHome}% EV vs Kalshi`, g.id, evKey);
+              }
+            }
+            if (fmv.evAway && +fmv.evAway >= threshold) {
+              const evKey = `ev-${g.id}-away-${Math.floor(+fmv.evAway / 5) * 5}`;
+              if (!alerts.find(a => a.key === evKey)) {
+                addAlert('ev', `💰 ${away.name} +${fmv.evAway}% EV vs Kalshi`, g.id, evKey);
+              }
+            }
+          }
+          
+          // Update previous states
+          previousGameStates[g.id] = { state: g.state, period: g.period, homeScore: g.homeScore, awayScore: g.awayScore };
+          previousScores[g.id] = currentTotal;
+        });
+        
+        // Fetch play-by-play for live/final games
+        games.forEach(g => {
+          if (g.state === 'LIVE' || g.state === 'FINAL') {
+            fetchPlayByPlay(g.id, g.homeAbbrev, g.awayAbbrev);
+          }
+        });
       }
       
       render();
