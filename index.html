@@ -999,14 +999,22 @@
     async function fetchKalshiMarkets() {
       const kalshiUrl = 'https://api.elections.kalshi.com/trade-api/v2/markets?series_ticker=KXNHLGAME&status=open&limit=200';
       const proxyUrls = [
+        kalshiUrl, // Try direct first
         'https://corsproxy.io/?' + encodeURIComponent(kalshiUrl),
-        'https://api.allorigins.win/raw?url=' + encodeURIComponent(kalshiUrl)
+        'https://api.allorigins.win/raw?url=' + encodeURIComponent(kalshiUrl),
+        'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(kalshiUrl)
       ];
 
+      console.log('Fetching Kalshi markets...');
+      
       for (const url of proxyUrls) {
         try {
+          console.log('Trying Kalshi URL:', url.substring(0, 50));
           const res = await fetch(url);
-          if (!res.ok) continue;
+          if (!res.ok) {
+            console.log('Kalshi response not ok:', res.status);
+            continue;
+          }
           const data = await res.json();
           const markets = data.markets || [];
           console.log('Kalshi raw markets:', markets.length);
@@ -2434,7 +2442,7 @@
             <div class="text-xs text-blue-400 font-mono break-all mb-3">${Object.keys(kalshiMarkets).length > 0 ? Object.keys(kalshiMarkets).map(k => {
               const m = kalshiMarkets[k];
               return `${k}:${Math.round(m.team1Prob*100)}/${Math.round(m.team2Prob*100)}`;
-            }).join(', ') : 'None loaded'}</div>
+            }).join(', ') : 'KALSHI FETCH FAILED - check console'}</div>
             ${Object.keys(oddsApiRawData).length > 0 ? `
             <div class="text-xs text-gray-400">Odds API Keys (${Object.keys(oddsApiRawData).length}):</div>
             <div class="text-xs text-green-400 font-mono break-all mb-3">${Object.keys(oddsApiRawData).join(', ')}</div>
