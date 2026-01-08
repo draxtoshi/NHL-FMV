@@ -996,6 +996,9 @@
     }
 
     // Fetch Kalshi NHL markets
+    // Store raw Kalshi debug info
+    let kalshiDebugInfo = [];
+    
     async function fetchKalshiMarkets() {
       // Add timestamp to bust cache
       const timestamp = Date.now();
@@ -1008,6 +1011,7 @@
       ];
 
       console.log('Fetching Kalshi markets...');
+      kalshiDebugInfo = [];
       
       for (const url of proxyUrls) {
         try {
@@ -1046,6 +1050,11 @@
             
             // Log ALL price fields from Kalshi
             console.log(`Kalshi RAW ${m.ticker}: yes_bid=${m.yes_bid}, yes_ask=${m.yes_ask}, last_price=${m.last_price}, yes_sub_title=${m.yes_sub_title}, no_bid=${m.no_bid}, no_ask=${m.no_ask}`);
+            
+            // Store debug info for DAL-WSH game specifically
+            if (ticker.includes('DAL') || ticker.includes('WSH')) {
+              kalshiDebugInfo.push(`${winner}:bid=${m.yes_bid},ask=${m.yes_ask},last=${m.last_price}`);
+            }
             
             // Store using the teams as they appear in the ticker
             const gameKey = `${team1}-${team2}`;
@@ -2449,6 +2458,10 @@
               const m = kalshiMarkets[k];
               return `${k}:${Math.round(m.team1Prob*100)}/${Math.round(m.team2Prob*100)}`;
             }).join(', ') : 'KALSHI FETCH FAILED - check console'}</div>
+            ${kalshiDebugInfo.length > 0 ? `
+            <div class="text-xs text-gray-400">Kalshi RAW (DAL/WSH):</div>
+            <div class="text-xs text-orange-400 font-mono break-all mb-3">${kalshiDebugInfo.join(' | ')}</div>
+            ` : ''}
             ${Object.keys(oddsApiRawData).length > 0 ? `
             <div class="text-xs text-gray-400">Odds API Keys (${Object.keys(oddsApiRawData).length}):</div>
             <div class="text-xs text-green-400 font-mono break-all mb-3">${Object.keys(oddsApiRawData).join(', ')}</div>
